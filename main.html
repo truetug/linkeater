@@ -99,9 +99,8 @@
 		  handleAddTask: function(e) {
 		    e.preventDefault();
 
-		    var url = this.state.url.trim();
-		    console.log('New url', url);
-		    var _this = this;
+		    var _this = this,
+		    	  url = this.state.url.trim();
 
 		    if(url)
 				axios.post(config.urls.task, {
@@ -115,12 +114,12 @@
 				    console.log(error);
 				  });
 		  },
-		  handleRemoveTask: function(e){
+		  handleRemoveTask: function(slug, e){
 		  	e.preventDefault();
-		  	console.log(e.target);
-		  	var _this = this;
+		  	var _this = this,
+		  		  url = config.urls.task + slug + '/';
 
-		  	axios.delete(config.urls.task, {})
+		  	axios.delete(url, {})
 				  .then(function(response) {
 				    console.log(response);
 				  })
@@ -165,11 +164,11 @@
 	          		) : '';
 
 	          		return (
-			          	<div key={task.id} className="small-4 column">
+			          	<div key={task.slug} className="small-4 column">
 				          	<div className="media-object">
 										  {taskImg}
 										  <div className="media-object-section main-section">
-										  	<a className="alert button" href="#" data-id={task.id} onClick={this.props.handleRemoveTask}><i className="fi-x"></i></a>
+										  	<a className="alert button" href="#" onClick={this.props.handleRemoveTask.bind(null, task.slug)}><i className="fi-x"></i></a>
 										    <h3>{task.url}</h3>
 										    <p>{task.message}</p>
 										    <p>{task.title}</p>
