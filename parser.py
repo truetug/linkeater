@@ -33,6 +33,7 @@ from urllib.parse import urldefrag
 from math import ceil
 from operator import truediv
 from uuid import uuid4
+from time import time
 
 try:
     from tornado.escape import json_decode
@@ -113,9 +114,13 @@ class Task(object):
         STATUS_FAIL: 'alert',
     }
 
+    slug = None
     url = None
     status = None
     style = None
+
+    created_at = None
+    updated_at = None
     
     response = None
     content = None
@@ -129,13 +134,13 @@ class Task(object):
     progress = 0
 
     def __init__(self, url):
-        self.id = uuid4().hex
+        self.slug = uuid4().hex
         self.url = self.prepare(url)
         self.up(status=self.STATUS_NEW)
 
     def as_json(self):
         result = {
-            'id': self.id,
+            'slug': self.slug,
             'url': self.url,
             'status': self.status,
             'message': self.message,
@@ -171,6 +176,13 @@ class Task(object):
             self.image = tmp.get('src')
 
     def up(self, **kwargs):
+        now = time()
+
+        if not self.created_at:
+            self.created_at = now
+
+        self.updated_at = now
+
         tmp = kwargs.get('status')
         if tmp in self.STATUS_LIST:
             self.status = tmp
@@ -238,25 +250,26 @@ class TaskDispatcher(object):
         pass
 
     def add(self, url):
+        logger.info('Adding url "%s"', url)
         task = self.storage['tasks'].get(url)
         if not task or task.status != Task.STATUS_SUCCESS:
             task = Task(url)
-            self.storage['tasks'][url] = task
+            self.storage['tasks'][task.slug] = task
             self.storage['queue'].append(task)
-            logger.info('Add url "%s"', url)
         else:
             task.message = 'URL "{}" is already parsed'.format(url)
 
-    def remove(self, url):
+    def remove(self, slug):
+        logger.info('Removing task "%s"', slug)
         result = False
-        if url in self.storage['tasks']:
-            del(self.storage['tasks'][url])
+        if slug in self.storage['tasks']:
+            del(self.storage['tasks'][slug])
             result = True
 
         return result
 
-    def get(self, url):
-        task = self.storage['tasks'].get(url)
+    def get(self, slug):
+        task = self.storage['tasks'].get(slug)
         return task
 
     def list(self, url=None, status=None):
@@ -379,10 +392,6 @@ class ApiHandler(RequestHandler):
     def handle_post(self, data):
         logger.info('Create object with data: %s', data)
 
-    def delete(self, slug):
-        result = self.storage.remove(slug)
-        return result
-
 
 class TaskHandler(ApiHandler):
     resource = 'task'
@@ -414,6 +423,10 @@ class TaskHandler(ApiHandler):
 
         return result
 
+    def delete(self, slug):
+        result = self.storage.remove(slug)
+        self.write('OK')
+
 
 def main():
     # Catch signals
@@ -436,6 +449,7 @@ def main():
 
     app = Application([
         (r'/api/task/$', TaskHandler),
+        (r'/api/task/([^/]+)/$', TaskHandler),
         (r'.+', MainHandler),
     ], **options.group_dict('application'))
 
