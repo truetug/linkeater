@@ -2,11 +2,11 @@
 # encoding: utf-8
 
 # Разработать приложение для парсинга страниц.
-# 
+#
 # Требования:
 # * Серверная часть приложения должна быть написана на языке Python;
 # * В процессе парсинга страница не должна перезагружаться;
-# 
+#
 # Сценарий работы:
 # * Пользователь открывает страницу.
 # * Вводит список URL до 5 штук за раз. Далее вводит информацию о дате времени, иначе используется текущая дата. Нажимает на кнопку Ок.
@@ -41,7 +41,7 @@ try:
     from tornado.ioloop import IOLoop
     from tornado.options import define, options, \
         parse_command_line, parse_config_file
-    from tornado.web import Application, RequestHandler
+    from tornado.web import Application, RequestHandler, StaticFileHandler
     from tornado.httpclient import AsyncHTTPClient
     import bs4
     imp.find_module('html5lib')
@@ -69,7 +69,8 @@ WORD_RE = re.compile(
     flags=(re.MULTILINE | re.UNICODE)
 )
 IGNORE_TAGS = ('script', 'style', 'pre', 'code', 'iframe')
-
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 logger = logging.getLogger(NAME)
 logger.setLevel(logging.INFO)
@@ -121,11 +122,11 @@ class Task(object):
 
     created_at = None
     updated_at = None
-    
+
     response = None
     content = None
     soup = None
-    
+
     title = None
     heading = None
     image = None
@@ -225,7 +226,7 @@ class Task(object):
             self.message = str(error)
             self.up(status=Task.STATUS_FAIL)
 
-        self.up(progress=100)            
+        self.up(progress=100)
         logger.debug('Parsed url:\n%s', self.as_json())
         raise gen.Return(True)
 
@@ -236,7 +237,7 @@ class Task(object):
 class TaskDispatcher(object):
     _instance = None
     storage = {
-        'tasks': OrderedDict(), 
+        'tasks': OrderedDict(),
         'queue': [],
     }
 
@@ -351,7 +352,7 @@ def get_url_content(task):
 
 class MainHandler(RequestHandler):
     def get(self):
-        self.render('main.html')
+        self.render('templates/main.html')
 
 
 class ApiHandler(RequestHandler):
@@ -363,7 +364,7 @@ class ApiHandler(RequestHandler):
         page = offset and ceil(truediv(total, offset))
 
         url = '{scheme}://{address}:{port}/api/{resource}/'.format(
-            address=options.address, 
+            address=options.address,
             scheme=options.scheme,
             port=options.port,
             resource=self.resource
@@ -378,7 +379,7 @@ class ApiHandler(RequestHandler):
                 'meta': self.handle_pagination(len(data)),
                 'objects': data,
             }
-    
+
         self.write(result)
 
     def handle_get(self, slug):
@@ -450,6 +451,7 @@ def main():
     app = Application([
         (r'/api/task/$', TaskHandler),
         (r'/api/task/([^/]+)/$', TaskHandler),
+        (r'/static/(.*)', StaticFileHandler, {'path': STATIC_ROOT}),
         (r'.+', MainHandler),
     ], **options.group_dict('application'))
 
