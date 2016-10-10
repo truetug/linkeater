@@ -151,17 +151,11 @@ TasksBox = React.createClass({
   render: function() {
     return (
       <div className="b-tasksbox">
-        <div className="row">
-          <h1>TasksBox</h1>
-          <TasksForm
-            url={this.state.url}
-            handleAddTask={this.handleAddTask}
-            handleChangeUrl={this.handleChangeUrl} />
-        </div>
-        <div className="row">
-          <TasksList
-            handleRemoveTask={this.handleRemoveTask}
-            tasks={this.state.tasks} />
+
+        <div className="top-bar">
+          <div className="top-bar-title">
+            <strong>LinkEater</strong>
+          </div>
         </div>
 
         <TasksForm
@@ -198,24 +192,26 @@ TasksList = React.createClass({
             var progressCls = ['progress', task.style].join(' '),
                 progressStl = {width: task.progress + '%'};
 
-            var taskImg = (task.img) ? (
+            var taskImg = (task.image) ? (
               <div className="media-object-section">
                 <div className="thumbnail">
-                  <img src={task.img} />
+                  <img src={task.image} />
                 </div>
               </div>
             ) : '';
 
+            var taskTitle = (task.progress == 100) ? task.url : task.url + ' (' + task.dl + ' kb)';
+
             return (
-              <div key={task.slug} className="small-4 column">
-                <div className="media-object">
-                  {taskImg}
+              <div key={task.slug} className="small-12 medium-12 large-4 column">
+                <div className="media-object stack-for-small">
                   <div className="media-object-section main-section">
-                    <a className="alert button" href="#" onClick={this.props.handleRemoveTask.bind(null, task.slug)}><i className="fi-x"></i></a>
-                    <h3>{task.url}</h3>
+                    <h3>{task.title} <a className="alert button tiny" href="#" onClick={this.props.handleRemoveTask.bind(null, task.slug)}><i className="fi-x"></i></a></h3>
+                    <p>url: <a href={task.url}>{task.url}</a></p>
+                    <p>size: {task.dl} kb</p>
+                    <p>heading: {task.heading}</p>
                     <p>{task.message}</p>
-                    <p>{task.title}</p>
-                    <p>{task.heading}</p>
+
                     <div className={progressCls}>
                       <div className="progress-meter" style={progressStl}></div>
                     </div>
