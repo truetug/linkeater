@@ -35,6 +35,7 @@ from operator import truediv
 from uuid import uuid4
 from time import time
 from urllib.parse import urlparse, urljoin, urlencode
+from datetime import datetime
 
 try:
     from tornado.escape import json_decode
@@ -86,7 +87,26 @@ define('debug', default=False, group='application',
 define('proxy_host', default='habrahabr.ru', group='application',
        help="host proxy to")
 
-define('concurrency', default=2, help='Number of worker for parsing urls')
+define('concurrency', default=5, help='Number of worker for parsing urls')
+
+
+def check_url(url):
+    import ipdb; ipdb.set_trace()
+    result = urlparse(url)
+    return True
+
+def get_datetime(dt):
+    result = None
+
+    try:
+
+        dt = dt.replace('T', '-').replace(':', '-')
+        # import ipdb; ipdb.set_trace()
+        result = dt and datetime(*map(int, dt.split('-')))
+    except ValueError:
+        pass
+
+    return result
 
 
 class Task(object):
@@ -476,8 +496,20 @@ class TaskHandler(ApiHandler):
     def handle_post(self, data):
         result = None
 
-        if data and 'url' in data:
-            self.storage.add(data.get('url'))
+        url = data.get('url')
+        date = get_datetime(data.get('date'))
+        if url:
+            delay = date and round(int(date.strftime('%s')) - time())
+            if delay > 0:
+                logger.info('Schedule url "%s" after %s seconds', url, delay)
+                IOLoop.instance().call_later(
+                    delay, lambda: self.storage.add(url),
+                )
+            elif delay:
+                result = 'Bad delay'
+            else:
+                self.storage.add(url)
+
         else:
             self.set_status(400)
 
