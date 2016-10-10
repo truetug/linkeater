@@ -4,7 +4,8 @@ var config = {
     task: '/api/task/',
   },
   taskBoxRefreshPeriodicity: 500
-};
+},
+now = new Date();
 
 var Root = React.createClass({
   render: function(){
@@ -78,6 +79,7 @@ TasksBox = React.createClass({
     return {
       page: 0,
       url: config.defaultUrl,
+      date: now.toISOString().slice(0, 16),
       tasks: []
     };
   },
@@ -108,28 +110,33 @@ TasksBox = React.createClass({
   handleChangeUrl: function(e) {
     this.setState({url: e.target.value});
   },
+  handleChangeDate: function(e) {
+    this.setState({date: e.target.value});
+  },
   handleAddTask: function(e) {
     e.preventDefault();
-    var _this = this;
 
     this.state.url.split('\n').map(url => {
       axios.post(config.urls.task, {
-        url: url.trim()
+        url: url.trim(),
+        date: this.state.date
       })
         .then(function(response) {
           console.log(response);
-          _this.setState({url: ''});
         })
         .catch(function(error) {
           console.log(error);
         });
     })
+
+    this.setState({url: ''});
   },
   handleRemoveTask: function(slug, e){
     e.preventDefault();
     var _this = this,
         url = config.urls.task + slug + '/';
 
+    if(window.confirm('Are you really want to remove the task?'))
     axios.delete(url, {})
       .then(function(response) {
         console.log(response);
@@ -153,6 +160,16 @@ TasksBox = React.createClass({
             handleRemoveTask={this.handleRemoveTask}
             tasks={this.state.tasks} />
         </div>
+
+        <TasksForm
+          url={this.state.url}
+          date={this.state.date}
+          handleAddTask={this.handleAddTask}
+          handleChangeUrl={this.handleChangeUrl}
+          handleChangeDate={this.handleChangeDate} />
+
+        <hr />
+
         <TasksList
           handleRemoveTask={this.handleRemoveTask}
           handlePageChange={this.handlePageChange}
@@ -208,19 +225,28 @@ TasksList = React.createClass({
 TasksForm = React.createClass({
   render: function(){
     return (
-      <div className="small-12 columns">
-        <form onSubmit={this.props.handleAddTask}>
-          <label htmlFor="id_url">URL: </label>
-          <textarea
-            onChange={this.props.handleChangeUrl}
-            id="id_url"
-            name="id_url"
-            rows="5"
-            placeholder="Enter url to parse"
-            defaultValue={this.props.url}></textarea>
-          <button type="submit" className="success button">Add tasks</button>
-        </form>
-    </div>
+      <div className="b-taskform">
+        <div className="row">
+          <div className="small-12 columns">
+            <form onSubmit={this.props.handleAddTask}>
+              <label htmlFor="id_url">Parse following URLs: </label>
+              <textarea
+                id="id_url"
+                rows="5"
+                value={this.props.url}
+                placeholder="Enter urls to parse"
+                onChange={this.props.handleChangeUrl}></textarea>
+              <label htmlFor="id_date">Schedule on: </label>
+              <input
+                id="id_date"
+                type="datetime-local"
+                min={this.props.date}
+                onChange={this.props.handleChangeDate} />
+              <button type="submit" className="success button">Add tasks</button>
+            </form>
+          </div>
+        </div>
+      </div>
     )
   }
 });
