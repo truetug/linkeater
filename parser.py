@@ -498,17 +498,16 @@ class TaskHandler(ApiHandler):
         result = None
 
         url = data.get('url')
-        date = get_datetime(data.get('date'))
+        date = data.get('date')
         if url:
-            delay = date and round(int(date.strftime('%s')) - time())
-            if delay > 0:
+            delay = date and round(int(get_datetime(date).strftime('%s')) - time())
+            if delay and delay > 59:
                 logger.info('Schedule url "%s" after %s seconds', url, delay)
                 IOLoop.instance().call_later(
                     delay, lambda: self.storage.add(url),
                 )
-            elif delay:
-                result = 'Bad delay'
             else:
+                result = 'Bad delay'
                 self.storage.add(url)
 
         else:

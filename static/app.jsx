@@ -1,11 +1,16 @@
 var config = {
+  debug: true,
   defaultUrl: 'http://ya.ru\nhttp://google.com\nhttp://facebook.com\nhttp://mail.ru',
   urls: {
     task: '/api/task/',
   },
   taskBoxRefreshPeriodicity: 500
 },
-now = new Date();
+now = new Date(),
+log = function(){
+  if(config.debug && window.console !== undefined)
+  console.log.apply(this, arguments);
+};
 
 var Root = React.createClass({
   render: function(){
@@ -79,7 +84,7 @@ TasksBox = React.createClass({
     return {
       page: 0,
       url: config.defaultUrl,
-      date: now.toISOString().slice(0, 16),
+      date: null,
       tasks: []
     };
   },
@@ -94,7 +99,6 @@ TasksBox = React.createClass({
       params: {page: this.state.page}
     })
       .then(function(response){
-        // console.log(response);
         _this.setState({
           tasks: response.data.objects,
           paging: response.data.meta
@@ -123,14 +127,14 @@ TasksBox = React.createClass({
         date: this.state.date
       })
         .then(function(response) {
-          // console.log(response);
+          log('Add task', response);
         })
         .catch(function(error) {
           console.log(error);
         });
     })
 
-    this.setState({url: ''});
+    this.setState({url: '', date: null});
   },
   handleRemoveTask: function(slug, e){
     e.preventDefault();
@@ -140,7 +144,7 @@ TasksBox = React.createClass({
     if(window.confirm('Are you really want to remove the task?'))
     axios.delete(url, {})
       .then(function(response) {
-        // console.log(response);
+        log('Delete task', response);
       })
       .catch(function(error) {
         console.log(error);
@@ -209,11 +213,11 @@ TasksList = React.createClass({
                     <p>size: {task.dl} kb</p>
                     <p>heading: {task.heading}</p>
                     <p>{task.message}</p>
-
                     <div className={progressCls}>
                       <div className="progress-meter" style={progressStl}></div>
                     </div>
                   </div>
+                  {taskImg}
                 </div>
               </div>
             )
