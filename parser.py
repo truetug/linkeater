@@ -34,6 +34,7 @@ from math import ceil
 from operator import truediv
 from uuid import uuid4
 from time import time
+from urllib.parse import urlparse, urljoin, urlencode
 
 try:
     from tornado.escape import json_decode
@@ -42,7 +43,7 @@ try:
     from tornado.options import define, options, \
         parse_command_line, parse_config_file
     from tornado.web import Application, RequestHandler, StaticFileHandler
-    from tornado.httpclient import AsyncHTTPClient
+    from tornado.httpclient import AsyncHTTPClient, HTTPRequest
     import bs4
     imp.find_module('html5lib')
 except ImportError:
@@ -64,20 +65,15 @@ except ImportError:
 
 
 NAME = 'ccbI/I0rpbI3'
-WORD_RE = re.compile(
-    r'(?:^|(?<=\s))(\w{6})(?:(?=\s)|$)',
-    flags=(re.MULTILINE | re.UNICODE)
-)
-IGNORE_TAGS = ('script', 'style', 'pre', 'code', 'iframe')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 logger = logging.getLogger(NAME)
 logger.setLevel(logging.INFO)
 ch = logging.StreamHandler()
 ch.setLevel(logging.INFO)
 logger.addHandler(ch)
-
 
 define('scheme', default='http', help="")
 define('address', default='127.0.0.1', help="address to listen on")
@@ -124,20 +120,27 @@ class Task(object):
     updated_at = None
 
     response = None
-    content = None
+    content = b''
     soup = None
 
     title = None
     heading = None
     image = None
+    image_file = None
 
     message = None
     progress = 0
+
+    cl = 0
+    dl = 0
 
     def __init__(self, url):
         self.slug = uuid4().hex
         self.url = self.prepare(url)
         self.up(status=self.STATUS_NEW)
+
+    def __str__(self):
+        return 'Task on parsing url "{}"'.format(self.url)
 
     def as_json(self):
         result = {
@@ -147,6 +150,8 @@ class Task(object):
             'message': self.message,
             'progress': self.progress,
             'style': self.style,
+            'dl': round(self.dl / 1024),
+            'created_at': self.created_at,
         }
 
         if self.status == Task.STATUS_SUCCESS:
@@ -158,6 +163,7 @@ class Task(object):
 
         return result
 
+    @gen.coroutine
     def process(self):
         logger.info('Process url "%s"', self.url)
 
@@ -166,15 +172,28 @@ class Task(object):
 
         tmp = self.soup.find('title')
         if tmp:
-            self.title = tmp.text.strip()
+            self.title = tmp.string.strip()
 
         tmp = self.soup.find('h1')
         if tmp:
-            self.heading = tmp.text.strip()
+            self.heading = tmp.string.strip()
 
-        tmp = self.soup.find('img[src]')
+        tmp = self.soup.find('img', src=True)
         if tmp:
-            self.image = tmp.get('src')
+            logging.info('IMAGE', tmp)
+            self.image = urljoin(self.url, tmp.get('src'))
+
+        if self.image:
+            logger.info('Downloading image %s', self.image)
+            self.image_file = os.path.join(MEDIA_ROOT, self.slug)
+            self.image_fp = open(self.image_file, 'wb')
+            yield AsyncHTTPClient().fetch(
+                HTTPRequest(
+                    url=self.image,
+                    streaming_callback=self.on_image_stream,
+                )
+            )
+            self.image_fp.close()
 
     def up(self, **kwargs):
         now = time()
@@ -202,18 +221,43 @@ class Task(object):
         url = url and urldefrag(url).url
         return url
 
+    def on_head(self, *args, **kwargs):
+        for header in args:
+            header = header.lower()
+            if 'content-length' in header:
+                self.cl = int(header.split(':')[-1].strip())
+            elif 'content-type' in header and 'text/html' not in header:
+                # Тут надо всё прекращать
+                pass
+
+    def on_stream(self, chunk):
+        self.dl += len(chunk)
+        self.content += chunk
+        if self.cl:
+            progress = round(25 + (self.dl / self.cl * 25))
+            self.up(progress=progress)
+
+    def on_image_stream(self, chunk):
+        self.image_fp.write(chunk)
+
     @gen.coroutine
     def request(self):
         logger.info('Request url "%s"', self.url)
         self.up(status=self.STATUS_REQUEST)
 
         try:
-            response = yield AsyncHTTPClient().fetch(self.url)
+            response = yield AsyncHTTPClient().fetch(
+                HTTPRequest(
+                    url=self.url,
+                    header_callback=self.on_head,
+                    streaming_callback=self.on_stream,
+                )
+            )
             self.up(status=self.STATUS_PROCESS, progress=25)
             yield gen.sleep(0.5)
 
             self.response = response
-            self.content = response.body
+            # self.content = response.body
             self.up(progress=50)
             yield gen.sleep(0.5)
 
@@ -230,14 +274,11 @@ class Task(object):
         logger.debug('Parsed url:\n%s', self.as_json())
         raise gen.Return(True)
 
-    def parse(self):
-        pass
-
 
 class TaskDispatcher(object):
     _instance = None
     storage = {
-        'tasks': OrderedDict(),
+        'tasks': {},
         'queue': [],
     }
 
@@ -247,8 +288,6 @@ class TaskDispatcher(object):
 
         return cls._instance
 
-    def __init__(self):
-        pass
 
     def add(self, url):
         logger.info('Adding url "%s"', url)
@@ -257,14 +296,23 @@ class TaskDispatcher(object):
             task = Task(url)
             self.storage['tasks'][task.slug] = task
             self.storage['queue'].append(task)
-        else:
-            task.message = 'URL "{}" is already parsed'.format(url)
 
     def remove(self, slug):
         logger.info('Removing task "%s"', slug)
         result = False
         if slug in self.storage['tasks']:
-            del(self.storage['tasks'][slug])
+            task = self.storage['tasks'][slug]
+
+            try:
+                os.remove(task.image_file)
+            except (OSError, TypeError):
+                pass
+
+            try:
+                del(self.storage['tasks'][slug])
+            except IndexError:
+                pass
+
             result = True
 
         return result
@@ -287,6 +335,7 @@ class TaskDispatcher(object):
 
             result.append(task.as_json())
 
+        result.sort(key=lambda x: -x['created_at'])
         return result
 
     def pop(self):
@@ -418,9 +467,6 @@ class TaskHandler(ApiHandler):
         self.storage = TaskDispatcher()
 
     def handle_get(self, slug):
-        """
-        Получить список тасков или детали по конкретному таску
-        """
         data = []
 
         url = self.get_argument('url', None)
@@ -428,9 +474,6 @@ class TaskHandler(ApiHandler):
         return self.storage.list(url, status)
 
     def handle_post(self, data):
-        """
-        Поставить таск на загрузку урла
-        """
         result = None
 
         if data and 'url' in data:
@@ -468,6 +511,7 @@ def main():
         (r'/api/task/$', TaskHandler),
         (r'/api/task/([^/]+)/$', TaskHandler),
         (r'/static/(.*)', StaticFileHandler, {'path': STATIC_ROOT}),
+        (r'/media/(.*)', StaticFileHandler, {'path': MEDIA_ROOT}),
         (r'.+', MainHandler),
     ], **options.group_dict('application'))
 
