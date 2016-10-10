@@ -358,27 +358,43 @@ class MainHandler(RequestHandler):
 class ApiHandler(RequestHandler):
     limit = 3
 
-    def handle_pagination(self, total=0):
-        offset = self.get_argument('offset', 0)
-        pages = ceil(truediv(total, self.limit))
-        page = offset and ceil(truediv(total, offset))
-
-        url = '{scheme}://{address}:{port}/api/{resource}/'.format(
-            address=options.address,
-            scheme=options.scheme,
-            port=options.port,
-            resource=self.resource
-        )
-        return {}
-
     def get(self, slug=None):
         data = self.handle_get(slug)
+        total = len(data)
 
-        if isinstance(data, list):
+        page = self.get_argument('page', None)
+        page = page and page.isdigit() and int(page) or 0
+        pages = ceil(truediv(total, self.limit))
+
+        if 0 <= page <= pages:
+            offset = page * self.limit
+
+            url = '/api/{resource}/'.format(
+                address=options.address,
+                scheme=options.scheme,
+                port=options.port,
+                resource=self.resource,
+            )
+
+            next_url, prev_url = [
+                '{}?{}'.format(url, urlencode((('page', p), ))) if _ else None for _, p in (
+                    (page < pages - 1, page + 1),
+                    (page > 0, page - 1),
+                )
+            ]
+
             result = {
-                'meta': self.handle_pagination(len(data)),
-                'objects': data,
+                'meta': {
+                    'total': pages,
+                    'current': page,
+                    'next': next_url,
+                    'previous': prev_url,
+                },
+                'objects': data[offset:offset + self.limit],
             }
+        else:
+            result = ''
+            self.set_status(404)
 
         self.write(result)
 

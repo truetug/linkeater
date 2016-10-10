@@ -18,37 +18,57 @@ var Root = React.createClass({
 Paginator = React.createClass({
   getInitialState: function() {
     return {
-      page: 1,
-      total: 13,
       near: 3
     };
   },
   render: function(){
-    var first = Math.max(this.state.page - this.state.near, 0),
-        last = Math.min(this.state.page + this.state.near, this.state.total),
+    var first = Math.max(this.props.current - this.state.near, 0),
+        last = Math.min(this.props.current + this.state.near, this.props.total),
+        nextLink = (this.props.next) ? (
+          <li className="pagination-next"><a href={this.props.next} aria-label="Next page" onClick={this.props.handlePageChange.bind(null, this.props.current + 1)}>Next</a></li>
+        ) : (
+          <li className="pagination-next disabled">Next</li>
+        ),
+        prevLink = (this.props.previous) ? (
+          <li className="pagination-previous"><a href={this.props.previous} aria-label="Previous page" onClick={this.props.handlePageChange.bind(null, this.props.current - 1)}>Previous</a></li>
+        ) : (
+          <li className="pagination-previous disabled">Previous</li>
+        ),
         pageList = [];
 
-    for(let i=first; i<=last; i++) {
+    for(let i=first; i<last; i++) {
       pageList.push({
         number: i,
+        display: i + 1,
         title: 'Page ' + i,
-        isCurrent: i == this.state.page
+        url: config.urls.task + '?page=' + i,
+        isCurrent: i == this.props.current
       });
     };
 
     return (
-      <div className="small-12 column">
-        <ul className="pagination text-center" role="navigation" aria-label="Pagination">
-          <li className="pagination-previous disabled">Previous</li>
-          <li className="current"><span className="show-for-sr">You are on page</span> 1</li>
-          <li><a href="#" aria-label="Page 2">2</a></li>
-          <li><a href="#" aria-label="Page 3">3</a></li>
-          <li><a href="#" aria-label="Page 4">4</a></li>
-          <li className="ellipsis"></li>
-          <li><a href="#" aria-label="Page 12">12</a></li>
-          <li><a href="#" aria-label="Page 13">13</a></li>
-          <li className="pagination-next"><a href="#" aria-label="Next page">Next</a></li>
-        </ul>
+      <div className="b-pagination">
+        <div className="row">
+          <div className="small-12 column">
+            <ul className="pagination text-center" role="navigation" aria-label="Pagination">
+              {prevLink}
+              {pageList.map((item, i) => {
+                var result = (item.isCurrent) ? (
+                  <li key={item.number} className="current">
+                    <span className="show-for-sr">You are on page</span> {item.display}
+                  </li>
+                ) : (
+                  <li key={item.number}>
+                    <a href={item.url} aria-label={item.title} onClick={this.props.handlePageChange.bind(null, item.number)}>{item.display}</a>
+                  </li>
+                )
+
+                return result;
+              })}
+              {nextLink}
+            </ul>
+          </div>
+        </div>
       </div>
     )
   }
@@ -56,6 +76,7 @@ Paginator = React.createClass({
 TasksBox = React.createClass({
   getInitialState: function() {
     return {
+      page: 0,
       url: config.defaultUrl,
       tasks: []
     };
@@ -67,7 +88,9 @@ TasksBox = React.createClass({
   loadDataFromServer: function() {
     var _this = this;
 
-    axios.get(config.urls.task, {})
+    axios.get(config.urls.task, {
+      params: {page: this.state.page}
+    })
       .then(function(response){
         // console.log(response);
         _this.setState({tasks: response.data.objects});
@@ -75,6 +98,12 @@ TasksBox = React.createClass({
       .catch(function(error) {
         console.log(error);
       });
+  },
+  handlePageChange: function(page, e) {
+    e.preventDefault();
+
+    this.setState({page: page});
+    console.log('Switch to page', page);
   },
   handleChangeUrl: function(e) {
     this.setState({url: e.target.value});
@@ -124,6 +153,10 @@ TasksBox = React.createClass({
             handleRemoveTask={this.handleRemoveTask}
             tasks={this.state.tasks} />
         </div>
+        <TasksList
+          handleRemoveTask={this.handleRemoveTask}
+          handlePageChange={this.handlePageChange}
+          {...this.state} />
       </div>
     );
   }
@@ -165,9 +198,9 @@ TasksList = React.createClass({
           })}
           </div>
 
-          <div className="row">
-          <Paginator />
-          </div>
+          <Paginator
+            {...this.props.paging}
+            handlePageChange={this.props.handlePageChange} />
         </div>
     )
   }
