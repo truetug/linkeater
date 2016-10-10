@@ -95,7 +95,10 @@ TasksBox = React.createClass({
     })
       .then(function(response){
         // console.log(response);
-        _this.setState({tasks: response.data.objects});
+        _this.setState({
+          tasks: response.data.objects,
+          paging: response.data.meta
+        });
       })
       .catch(function(error) {
         console.log(error);
