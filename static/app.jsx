@@ -177,6 +177,14 @@ TasksBox = React.createClass({
           handleRemoveTask={this.handleRemoveTask}
           handlePageChange={this.handlePageChange}
           {...this.state} />
+
+        <footer className="b-footer">
+          <div className="row">
+            <div className="column text-center">
+              <small>© <a href="http://truetug.info/">tug</a>, 2016</small>
+            </div>
+          </div>
+        </footer>
       </div>
     );
   }
