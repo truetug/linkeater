@@ -192,20 +192,17 @@ TasksList = React.createClass({
           <div className="row">
           {this.props.tasks.map((task) => {
             var progressCls = ['progress', task.style].join(' '),
-                progressStl = {width: task.progress + '%'};
-
-            var taskImg = (task.image) ? (
-              <div className="media-object-section">
-                <div className="thumbnail">
-                  <img src={task.image} />
-                </div>
-              </div>
-            ) : '';
-
-            var taskTitle = (task.progress == 100) ? task.url : task.url + ' (' + task.dl + ' kb)';
+                progressStl = {width: task.progress + '%'},
+                taskStl = (task.image) ? {
+                  backgroundImage: 'url(' + task.image + ')', 
+                  backgroundPosition: 'center center',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundSize: 'contain'
+                } : {},
+                taskTitle = (task.progress == 100) ? task.url : task.url + ' (' + task.dl + ' kb)';
 
             return (
-              <div key={task.slug} className="small-12 medium-12 large-4 column">
+              <div key={task.slug} className="small-12 medium-12 large-4 column" style={taskStl}>
                 <div className="media-object stack-for-small">
                   <div className="media-object-section main-section">
                     <h3>{task.title} <a className="alert button tiny" href="#" onClick={this.props.handleRemoveTask.bind(null, task.slug)}><i className="fi-x"></i></a></h3>
@@ -217,7 +214,6 @@ TasksList = React.createClass({
                       <div className="progress-meter" style={progressStl}></div>
                     </div>
                   </div>
-                  {taskImg}
                 </div>
               </div>
             )

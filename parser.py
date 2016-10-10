@@ -507,7 +507,6 @@ class TaskHandler(ApiHandler):
                     delay, lambda: self.storage.add(url),
                 )
             else:
-                result = 'Bad delay'
                 self.storage.add(url)
 
         else:
