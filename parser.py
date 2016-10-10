@@ -36,6 +36,7 @@ from uuid import uuid4
 from time import time
 from urllib.parse import urlparse, urljoin, urlencode
 from datetime import datetime
+import shutil
 
 try:
     from tornado.escape import json_decode
@@ -521,6 +522,13 @@ class TaskHandler(ApiHandler):
 
 
 def main():
+    # Prepare media dir
+    try:
+        shutil.rmtree(MEDIA_ROOT)
+        os.makedirs(MEDIA_ROOT)
+    except OSError:
+        logger.error('Something wrong with media directory "%s"', MEDIA_ROOT)
+
     # Catch signals
     signal.signal(signal.SIGINT, on_signal)
     signal.signal(signal.SIGTERM, on_signal)
