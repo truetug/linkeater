@@ -106,9 +106,7 @@ TasksBox = React.createClass({
   },
   handlePageChange: function(page, e) {
     e.preventDefault();
-
     this.setState({page: page});
-    console.log('Switch to page', page);
   },
   handleChangeUrl: function(e) {
     this.setState({url: e.target.value});
@@ -125,7 +123,7 @@ TasksBox = React.createClass({
         date: this.state.date
       })
         .then(function(response) {
-          console.log(response);
+          // console.log(response);
         })
         .catch(function(error) {
           console.log(error);
@@ -142,7 +140,7 @@ TasksBox = React.createClass({
     if(window.confirm('Are you really want to remove the task?'))
     axios.delete(url, {})
       .then(function(response) {
-        console.log(response);
+        // console.log(response);
       })
       .catch(function(error) {
         console.log(error);
