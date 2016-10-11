@@ -2,15 +2,52 @@ var config = {
   debug: true,
   defaultUrl: 'http://ya.ru\nhttp://google.com\nhttp://facebook.com\nhttp://mail.ru',
   urls: {
+    ws: 'ws://127.0.0.1:8888/websocket/',
     task: '/api/task/',
   },
   taskBoxRefreshPeriodicity: 500
 },
-now = new Date(),
 log = function(){
   if(config.debug && window.console !== undefined)
   console.log.apply(this, arguments);
-};
+},
+sock = window.WebSocket === undefined && function(){
+  log('Websocket is not available'); 
+
+  return {
+    send: function(){}
+  }}() || function(){
+    var timeout = 500,
+      ws,
+      connect = function(){ 
+        ws = new WebSocket(config.urls.ws);
+        ws.onopen = function(event){ log('connected', event) };
+        ws.onclose = function(event){ 
+          log('close', event, 'reconnect in', timeout);
+          setTimeout(connect, timeout);
+          timeout = timeout * 2;
+        };
+        ws.onerror = function(event){ log('error', event) };
+        ws.onmessage = function(event){ log('message', event) };
+      },
+      send = function(data){
+        log('Sending data', data, ws);
+
+        if(ws){
+          ws.send(JSON.stringify(data));
+        }
+        else {
+          log('Websocket down, try resend in', timeout);
+          setTimeout(this.send(), timeout);
+        }
+      };
+
+  connect();
+  return {
+    send: send
+  }
+}(),
+now = new Date();
 
 var Root = React.createClass({
   render: function(){

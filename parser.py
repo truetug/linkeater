@@ -41,6 +41,7 @@ import shutil
 try:
     from tornado.escape import json_decode
     from tornado import gen
+    from tornado.websocket import WebSocketHandler, websocket_connect
     from tornado.ioloop import IOLoop
     from tornado.options import define, options, \
         parse_command_line, parse_config_file
@@ -234,6 +235,8 @@ class Task(object):
             self.progress = tmp
 
         self.message = kwargs.get('message')
+        TaskDispatcher().update()
+
 
     def get_status(self):
         return self.status
@@ -309,6 +312,8 @@ class TaskDispatcher(object):
 
         return cls._instance
 
+    def update(self):
+        EchoWebSocket.update(self.list())
 
     def add(self, url):
         logger.info('Adding url "%s"', url)
@@ -362,7 +367,6 @@ class TaskDispatcher(object):
     def pop(self):
         queue = self.storage['queue']
         return queue and queue.pop(0) or None
-
 
 @gen.coroutine
 def worker(i):
@@ -503,6 +507,44 @@ class TaskHandler(ApiHandler):
         self.write('OK')
 
 
+class EchoWebSocket(WebSocketHandler):
+    clients = set()
+
+    def __init__(self, *args, **kwargs):
+        super(EchoWebSocket, self).__init__(*args, **kwargs)
+        self.storage = TaskDispatcher()
+
+    def check_origin(self, origin):
+        return True
+
+    def open(self):
+        print("WebSocket opened")
+        EchoWebSocket.clients.add(self)
+
+    def on_message(self, message):
+        try:
+            data = json_decode(message)
+        except:
+            data = {}
+
+        print('received:', message, data)
+        self.write_message(u"You said: " + message)
+
+    def on_close(self):
+        print("WebSocket closed")
+
+    @classmethod
+    def update(cls, message):
+        for client in cls.clients:
+            try:
+                data = {
+                    'objects': message,
+                }
+                client.write_message(data)
+            except:
+                logger.error("Error sending message", exc_info=True)
+
+
 def main():
     # Prepare media dir
     try:
@@ -534,6 +576,7 @@ def main():
         (r'/api/task/([^/]+)/$', TaskHandler),
         (r'/static/(.*)', StaticFileHandler, {'path': STATIC_ROOT}),
         (r'/media/(.*)', StaticFileHandler, {'path': MEDIA_ROOT}),
+        (r'/websocket/$', EchoWebSocket),
         (r'.+', MainHandler),
     ], **options.group_dict('application'))
 
