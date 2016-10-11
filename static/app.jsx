@@ -2,10 +2,13 @@ var config = {
   debug: true,
   defaultUrl: 'http://ya.ru\nhttp://google.com\nhttp://facebook.com\nhttp://mail.ru',
   urls: {
+    site: 'http://truetug.info/',
     ws: 'ws://127.0.0.1:8888/websocket/',
     task: '/api/task/',
   },
-  taskBoxRefreshPeriodicity: 500
+  author: 'tug',
+  taskBoxRefreshPeriodicity: 500,
+  paginationNear: 3,
 },
 log = function(){
   if(config.debug && window.console !== undefined)
@@ -59,14 +62,9 @@ var Root = React.createClass({
   }
 }),
 Paginator = React.createClass({
-  getInitialState: function() {
-    return {
-      near: 3
-    };
-  },
   render: function(){
-    var first = Math.max(this.props.current - this.state.near, 0),
-        last = Math.min(this.props.current + this.state.near, this.props.total),
+    var first = Math.max(this.props.current - config.paginationNear, 0),
+        last = Math.min(this.props.current + config.paginationNear, this.props.total - 1),
         pageList = [];
 
     pageList.push({
@@ -77,7 +75,7 @@ Paginator = React.createClass({
       isDisabled: this.props.current == 0
     });
 
-    for(let i=first; i<last; i++) {
+    for(let i=first; i<=last; i++) {
       let display = i + 1;
 
       pageList.push({
@@ -94,7 +92,7 @@ Paginator = React.createClass({
       cls: 'pagination-next',
       title: 'Next page',
       display: 'Next',
-      isDisabled: this.props.current == this.props.total - 1
+      isDisabled: this.props.current >= this.props.total - 1
     });
 
     return (
@@ -220,7 +218,7 @@ TasksBox = React.createClass({
         <footer className="b-footer">
           <div className="row">
             <div className="column text-center">
-              <small>© <a href="http://truetug.info/">tug</a>, 2016</small>
+              <small>© <a href="{config.urls.site}">{config.author}</a>, {now.getFullYear()}</small>
             </div>
           </div>
         </footer>
