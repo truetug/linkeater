@@ -439,26 +439,10 @@ class ApiHandler(RequestHandler):
         if 0 <= page <= pages:
             offset = page * self.limit
 
-            url = '/api/{resource}/'.format(
-                address=options.address,
-                scheme=options.scheme,
-                port=options.port,
-                resource=self.resource,
-            )
-
-            next_url, prev_url = [
-                '{}?{}'.format(url, urlencode((('page', p), ))) if _ else None for _, p in (
-                    (page < pages - 1, page + 1),
-                    (page > 0, page - 1),
-                )
-            ]
-
             result = {
                 'meta': {
                     'total': pages,
                     'current': page,
-                    'next': next_url,
-                    'previous': prev_url,
                 },
                 'objects': data[offset:offset + self.limit],
             }

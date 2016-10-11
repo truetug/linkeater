@@ -30,48 +30,54 @@ Paginator = React.createClass({
   render: function(){
     var first = Math.max(this.props.current - this.state.near, 0),
         last = Math.min(this.props.current + this.state.near, this.props.total),
-        nextLink = (this.props.next) ? (
-          <li className="pagination-next"><a href={this.props.next} aria-label="Next page" onClick={this.props.handlePageChange.bind(null, this.props.current + 1)}>Next</a></li>
-        ) : (
-          <li className="pagination-next disabled">Next</li>
-        ),
-        prevLink = (this.props.previous) ? (
-          <li className="pagination-previous"><a href={this.props.previous} aria-label="Previous page" onClick={this.props.handlePageChange.bind(null, this.props.current - 1)}>Previous</a></li>
-        ) : (
-          <li className="pagination-previous disabled">Previous</li>
-        ),
         pageList = [];
 
+    pageList.push({
+      number: Math.max(this.props.current - 1, 0),
+      cls: 'pagination-previous',
+      title: 'Previous page',
+      display: 'Previous',
+      isDisabled: this.props.current == 0
+    });
+
     for(let i=first; i<last; i++) {
+      let display = i + 1;
+
       pageList.push({
         number: i,
-        display: i + 1,
-        title: 'Page ' + i,
+        display: display,
+        title: 'Page ' + display,
         url: config.urls.task + '?page=' + i,
         isCurrent: i == this.props.current
       });
     };
+
+    pageList.push({
+      number: Math.min(this.props.current + 1, this.props.total - 1),
+      cls: 'pagination-next',
+      title: 'Next page',
+      display: 'Next',
+      isDisabled: this.props.current == this.props.total - 1
+    });
 
     return (
       <div className="b-pagination">
         <div className="row">
           <div className="small-12 column">
             <ul className="pagination text-center" role="navigation" aria-label="Pagination">
-              {prevLink}
               {pageList.map((item, i) => {
-                var result = (item.isCurrent) ? (
-                  <li key={item.number} className="current">
+                let itemCls = [item.cls, item.isDisabled && 'disabled', item.isCurrent && 'current'].map((cls) => cls || '').join(' ').trim();
+                
+                return (item.isCurrent || item.isDisabled) ? (
+                  <li key={i} className={itemCls}>
                     <span className="show-for-sr">You are on page</span> {item.display}
                   </li>
                 ) : (
-                  <li key={item.number}>
+                  <li key={i} className={itemCls}>
                     <a href={item.url} aria-label={item.title} onClick={this.props.handlePageChange.bind(null, item.number)}>{item.display}</a>
                   </li>
-                )
-
-                return result;
+                );
               })}
-              {nextLink}
             </ul>
           </div>
         </div>
