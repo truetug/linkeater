@@ -236,24 +236,42 @@ TasksList = React.createClass({
                 progressStl = {width: task.progress + '%'},
                 taskStl = (task.image) ? {
                   backgroundImage: 'url(' + task.image + ')', 
-                  backgroundPosition: 'center center',
+                  backgroundPosition: 'top center',
                   backgroundRepeat: 'no-repeat',
-                  backgroundSize: 'contain'
+                  backgroundSize: 'contain',
                 } : {},
-                taskTitle = (task.progress == 100) ? task.url : task.url + ' (' + task.dl + ' kb)';
+                taskTitle = (task.progress == 100) ? task.url : task.url + ' (' + task.dl + ' kb)',
+                taskScreenshotStl = {
+                  backgroundImage: 'url(' + task.screenshot + ')', 
+                  backgroundPosition: 'top center',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundSize: 'cover',
+                  width: '100%',
+                  height: '200px',
+                  overflow: 'hidden',
+                  borderBottom: '1px dashed #CCC',
+                },
+                taskScreenshot = (task.screenshot) ? (
+                  <div>
+                    <p>Screenshot:</p>
+                    <div style={taskScreenshotStl}></div>
+                  </div>
+                ) : '';
 
             return (
               <div key={task.slug} className="small-12 medium-12 large-4 column" style={taskStl}>
                 <div className="media-object stack-for-small">
                   <div className="media-object-section main-section">
                     <h3>{task.title} <a className="alert button tiny" href="#" onClick={this.props.handleRemoveTask.bind(null, task.slug)}><i className="fi-x"></i></a></h3>
-                    <p>url: <a href={task.url}>{task.url}</a></p>
-                    <p>size: {task.dl} kb</p>
-                    <p>heading: {task.heading}</p>
+                    <p>URL: <a href={task.url}>{task.url}</a></p>
+                    <p>Size: {task.dl} kb</p>
+                    <p>Heading: {task.heading}</p>
                     <p>{task.message}</p>
+                    <p>Progress:</p>
                     <div className={progressCls}>
                       <div className="progress-meter" style={progressStl}></div>
                     </div>
+                    {taskScreenshot}
                   </div>
                 </div>
               </div>
