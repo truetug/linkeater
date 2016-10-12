@@ -279,7 +279,8 @@ class Task(object):
             self.progress = tmp
 
         self.message = kwargs.get('message')
-        TaskDispatcher().update()
+        # TODO: Need think of a better way to send signal to event handler
+        MainWebSocketHandler.update()
 
 
     def get_status(self):
@@ -357,11 +358,9 @@ class TaskDispatcher(object):
 
         return cls._instance
 
-    def update(self):
-        EchoWebSocket.update(self.list())
-
-    def add(self, url):
+    def add(self, url, schedule=None):
         logger.info('Adding url "%s"', url)
+
         task = self.storage['tasks'].get(url)
         if not task or task.status != Task.STATUS_SUCCESS:
             task = Task(url)
@@ -398,6 +397,10 @@ class TaskDispatcher(object):
         for task in task_list.values():
             # Kind of status filter
             if status and task.status != status:
+                continue
+
+            # Do not show deleted
+            if task.status == Task.STATUS_DELETED:
                 continue
 
             # Kind of url filter
@@ -500,9 +503,15 @@ def get_paged(items, page=0, limit=3):
     return result
 
 class MainHandler(RequestHandler):
-    def get(self):
-        self.render('templates/main.html')
+    def get(self, path=None):
+        self.set_status(404)
+        template = 'templates/error.html'
 
+        if path is None:
+            self.set_status(200)
+            template = 'templates/main.html'
+
+        self.render(template)        
 
 
 class ApiHandler(RequestHandler):
@@ -568,42 +577,70 @@ class TaskHandler(ApiHandler):
         self.write('OK')
 
 
-class EchoWebSocket(WebSocketHandler):
+class MainWebSocketHandler(WebSocketHandler):
+    page = 0
     clients = set()
 
     def __init__(self, *args, **kwargs):
-        super(EchoWebSocket, self).__init__(*args, **kwargs)
+        super(MainWebSocketHandler, self).__init__(*args, **kwargs)
         self.storage = TaskDispatcher()
 
     def check_origin(self, origin):
         return True
 
     def open(self):
-        print("WebSocket opened")
-        EchoWebSocket.clients.add(self)
+        MainWebSocketHandler.clients.add(self)
+        self.send('configuration', {
+            'name': NAME,
+            'version': '.'.join([str(_) for _ in VERSION]),
+            'debug': options.debug,    
+        })
+        self.send()
 
     def on_message(self, message):
         try:
             data = json_decode(message)
-        except:
+        except Exception:
             data = {}
 
-        print('received:', message, data)
-        self.write_message(u"You said: " + message)
+        action = data.get('action')
+        if action == 'list':
+            page = data.get('page', 0)
+            self.page = page
+            self.send()
+        else:
+            logger.info(
+                'WebsocketHandler have received message: %s', 
+                message
+            )
+
+            self.write_message(
+                u'I have no idea what you are talking about: {}'.format(
+                    message
+                )
+            )
 
     def on_close(self):
-        print("WebSocket closed")
+        MainWebSocketHandler.clients.remove(self)
+
+    def send(self, channel=None, message=None):
+        channel = channel or 'tasks'
+
+        if not message:
+            message = get_paged(self.storage.list(), self.page)
+
+        try:
+            self.write_message({
+                'channel': channel,
+                'message': message,
+            })
+        except:
+            logger.error('Error sending message', exc_info=True)
 
     @classmethod
-    def update(cls, message):
+    def update(cls, channel=None, message=None):
         for client in cls.clients:
-            try:
-                data = {
-                    'objects': message,
-                }
-                client.write_message(data)
-            except:
-                logger.error("Error sending message", exc_info=True)
+            client.send(channel, message)
 
 
 def main():
@@ -641,8 +678,8 @@ def main():
         (r'/api/task/([^/]+)/$', TaskHandler),
         (r'/static/(.*)', StaticFileHandler, {'path': STATIC_ROOT}),
         (r'/media/(.*)', StaticFileHandler, {'path': MEDIA_ROOT}),
-        (r'/websocket/$', EchoWebSocket),
-        (r'.+', MainHandler),
+        (r'/websocket/$', MainWebSocketHandler),
+        (r'/([^/]+)?/?', MainHandler),
     ], **options.group_dict('application'))
 
     app.listen(options.port, options.address)
