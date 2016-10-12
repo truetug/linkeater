@@ -155,6 +155,7 @@ class Task(object):
 
     created_at = None
     updated_at = None
+    schedule = None
 
     response = None
     content = b''
@@ -170,10 +171,32 @@ class Task(object):
     cl = 0
     dl = 0
 
-    def __init__(self, url):
+    def __init__(self, url, schedule=None):
         self.slug = uuid4().hex
         self.url = self.prepare(url)
-        self.up(status=self.STATUS_NEW)
+
+        try:
+            self.schedule = int(get_datetime(schedule).strftime('%s'))
+        except Exception:
+            pass
+
+        params = {'status': self.STATUS_NEW}
+        if self.schedule:
+            delay = self.get_delay()
+            logger.info(
+                'Scheduling url "%s" after %s seconds', 
+                self.url, delay
+            )
+            params = {
+                'status': self.STATUS_SCHEDULED,
+                'message': 'Scheduled after {}'.format(delay),
+            }
+            IOLoop.instance().call_later(
+                delay,
+                lambda: TaskDispatcher().queue(self),
+            )
+
+        self.up(**params)
 
     def __str__(self):
         return 'Task on parsing url "{}"'.format(self.url)
@@ -210,6 +233,10 @@ class Task(object):
             })
 
         return result
+
+    def get_delay(self):
+        delay = self.schedule and round(self.schedule - time())
+        return delay
 
     def get_url(self, key):
         path, url = self.get_path(key), self.get_path(key, is_url=True)
@@ -258,7 +285,7 @@ class Task(object):
                 url=self.url, 
                 file=self.get_path('screenshot')
             ),
-            exit_callback=lambda x: self.up()
+            exit_callback=lambda x: self.up(progress=100)
         )
 
     def up(self, **kwargs):
@@ -279,9 +306,9 @@ class Task(object):
             self.progress = tmp
 
         self.message = kwargs.get('message')
+
         # TODO: Need think of a better way to send signal to event handler
         MainWebSocketHandler.update()
-
 
     def get_status(self):
         return self.status
@@ -305,9 +332,6 @@ class Task(object):
         if self.cl:
             progress = round(25 + (self.dl / self.cl * 25))
             self.up(progress=progress)
-
-    def on_image_stream(self, chunk):
-        self.image_fp.write(chunk)
 
     @gen.coroutine
     def request(self):
@@ -339,7 +363,7 @@ class Task(object):
             self.message = str(error)
             self.up(status=Task.STATUS_FAIL)
 
-        self.up(progress=100)
+        self.up(progress=75)
         logger.debug('Parsed url data:\n%s', self.as_json())
         raise gen.Return(True)
 
@@ -360,12 +384,13 @@ class TaskDispatcher(object):
 
     def add(self, url, schedule=None):
         logger.info('Adding url "%s"', url)
+        task = Task(url, schedule)
+        self.storage['tasks'][task.slug] = task
+        if task.status == Task.STATUS_NEW:
+            self.queue(task)
 
-        task = self.storage['tasks'].get(url)
-        if not task or task.status != Task.STATUS_SUCCESS:
-            task = Task(url)
-            self.storage['tasks'][task.slug] = task
-            self.storage['queue'].append(task)
+    def queue(self, task):
+        self.storage['queue'].append(task)
 
     def remove(self, slug):
         logger.info('Removing task "%s"', slug)
@@ -558,15 +583,7 @@ class TaskHandler(ApiHandler):
         url = data.get('url')
         date = data.get('date')
         if url:
-            delay = date and round(int(get_datetime(date).strftime('%s')) - time())
-            if delay and delay > 59:
-                logger.info('Schedule url "%s" after %s seconds', url, delay)
-                IOLoop.instance().call_later(
-                    delay, lambda: self.storage.add(url),
-                )
-            else:
-                self.storage.add(url)
-
+            self.storage.add(url, date)
         else:
             self.set_status(400)
 
@@ -628,6 +645,7 @@ class MainWebSocketHandler(WebSocketHandler):
 
         if not message:
             message = get_paged(self.storage.list(), self.page)
+            message['scheduled'] = len(self.storage.list(status=Task.STATUS_SCHEDULED))
 
         try:
             self.write_message({
