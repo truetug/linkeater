@@ -11,6 +11,7 @@ var config = {
   author: 'tug',
   taskBoxRefreshPeriodicity: 500,
   paginationNear: 3,
+  scheduledMax: 5,
 },
 log = function(){
   if(config.debug && window.console !== undefined)
@@ -145,7 +146,8 @@ TasksBox = React.createClass({
       page: 0,
       url: config.defaultUrl,
       date: null,
-      tasks: []
+      tasks: [],
+      scheduled: 0,
     };
   },
   componentDidMount: function() {
@@ -173,11 +175,12 @@ TasksBox = React.createClass({
   handleDataFromServer: function(data) {
     this.setState({
       tasks: data.objects,
-      paging: data.meta
+      paging: data.meta,
+      scheduled: data.scheduled,
     })
   },
   handlePageChange: function(page, e) {
-    e.preventDefault();
+    e && e.preventDefault();
     this.setState({page: page});
 
     if(sock) {
@@ -197,8 +200,11 @@ TasksBox = React.createClass({
     e.preventDefault();
 
     this.state.url.split('\n').map(url => {
+      url = url.trim();
+
+      if(url)
       axios.post(config.urls.task, {
-        url: url.trim(),
+        url: url,
         date: this.state.date
       })
         .then(function(response) {
@@ -220,6 +226,10 @@ TasksBox = React.createClass({
     axios.delete(url, {})
       .then(function(response) {
         log('Delete task', response);
+        if(!_this.state.objects) {
+          let page = Math.max(0, _this.state.page - 1);
+          _this.handlePageChange(page);
+        }
       })
       .catch(function(error) {
         console.log(error);
@@ -238,6 +248,7 @@ TasksBox = React.createClass({
         <TasksForm
           url={this.state.url}
           date={this.state.date}
+          scheduled={this.state.scheduled}
           handleAddTask={this.handleAddTask}
           handleChangeUrl={this.handleChangeUrl}
           handleChangeDate={this.handleChangeDate} />
@@ -300,7 +311,7 @@ TasksList = React.createClass({
                     <p>URL: <a href={task.url}>{task.url}</a></p>
                     <p>Size: {task.dl} kb</p>
                     <p>Heading: {task.heading}</p>
-                    <p>{task.message}</p>
+                    <p>Message: {task.message}</p>
                     <p>Progress:</p>
                     <div className={progressCls}>
                       <div className="progress-meter" style={progressStl}></div>
@@ -322,6 +333,10 @@ TasksList = React.createClass({
 }),
 TasksForm = React.createClass({
   render: function(){
+    let isDisabled = this.props.scheduled >= config.scheduledMax,
+        buttonCls = ['success', 'button', isDisabled && 'disabled'].map((cls) => cls || '').join(' ').trim(),
+        date = this.props.date || now.toISOString().slice(0, 16);
+
     return (
       <div className="b-taskform">
         <div className="row">
@@ -338,9 +353,9 @@ TasksForm = React.createClass({
               <input
                 id="id_date"
                 type="datetime-local"
-                min={this.props.date}
+                min={date}
                 onChange={this.props.handleChangeDate} />
-              <button type="submit" className="success button">Add tasks</button>
+              <button disabled={isDisabled} type="submit" className={buttonCls}>Add tasks</button>
             </form>
           </div>
         </div>
