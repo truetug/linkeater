@@ -1,4 +1,6 @@
 var config = {
+  name: 'LinkEater',
+  version: '1.0.0',
   debug: true,
   defaultUrl: 'http://ya.ru\nhttp://google.com\nhttp://facebook.com\nhttp://mail.ru',
   urls: {
@@ -15,23 +17,35 @@ log = function(){
   console.log.apply(this, arguments);
 },
 sock = window.WebSocket === undefined && function(){
+  // Weird experiment
   log('Websocket is not available'); 
 
   return {
     send: function(){}
   }}() || function(){
     var timeout = 500,
+      maxTimeout = 30000,
       ws,
+      listeners = {},
       connect = function(){ 
         ws = new WebSocket(config.urls.ws);
         ws.onopen = function(event){ log('connected', event) };
         ws.onclose = function(event){ 
           log('close', event, 'reconnect in', timeout);
           setTimeout(connect, timeout);
-          timeout = timeout * 2;
+          timeout = Math.min(timeout * 2, maxTimeout);
         };
         ws.onerror = function(event){ log('error', event) };
-        ws.onmessage = function(event){ log('message', event) };
+        ws.onmessage = function(event){ 
+          log('on message', event);
+
+          var data = JSON.parse(event.data),
+              channel = data.channel;
+
+          if(channel && channel in listeners) {
+            listeners[channel].map((cb) => cb(data.message))
+          };
+        };
       },
       send = function(data){
         log('Sending data', data, ws);
@@ -43,11 +57,17 @@ sock = window.WebSocket === undefined && function(){
           log('Websocket down, try resend in', timeout);
           setTimeout(this.send(), timeout);
         }
+      },
+      register = function(channel, cb){
+        log('Subscribing', cb, 'for channel', channel);
+        if(!listeners[channel]) listeners[channel] = [];
+        listeners[channel].push(cb);
       };
 
   connect();
   return {
-    send: send
+    send: send,
+    register: register,
   }
 }(),
 now = new Date();
@@ -82,7 +102,6 @@ Paginator = React.createClass({
         number: i,
         display: display,
         title: 'Page ' + display,
-        url: config.urls.task + '?page=' + i,
         isCurrent: i == this.props.current
       });
     };
@@ -109,7 +128,7 @@ Paginator = React.createClass({
                   </li>
                 ) : (
                   <li key={i} className={itemCls}>
-                    <a href={item.url} aria-label={item.title} onClick={this.props.handlePageChange.bind(null, item.number)}>{item.display}</a>
+                    <a aria-label={item.title} onClick={this.props.handlePageChange.bind(null, item.number)}>{item.display}</a>
                   </li>
                 );
               })}
@@ -130,8 +149,13 @@ TasksBox = React.createClass({
     };
   },
   componentDidMount: function() {
-    this.loadDataFromServer();
-    setInterval(this.loadDataFromServer, config.taskBoxRefreshPeriodicity);
+    if(!sock) {
+      this.loadDataFromServer();
+      setInterval(this.loadDataFromServer, config.taskBoxRefreshPeriodicity);
+    }
+    else {
+      sock.register('tasks', this.handleDataFromServer);
+    }
   },
   loadDataFromServer: function() {
     var _this = this;
@@ -140,18 +164,28 @@ TasksBox = React.createClass({
       params: {page: this.state.page}
     })
       .then(function(response){
-        _this.setState({
-          tasks: response.data.objects,
-          paging: response.data.meta
-        });
+        _this.handleDataFromServer(response);
       })
       .catch(function(error) {
         console.log(error);
       });
   },
+  handleDataFromServer: function(data) {
+    this.setState({
+      tasks: data.objects,
+      paging: data.meta
+    })
+  },
   handlePageChange: function(page, e) {
     e.preventDefault();
     this.setState({page: page});
+
+    if(sock) {
+      sock.send({
+        action: 'list',
+        page: page,
+      })
+    }
   },
   handleChangeUrl: function(e) {
     this.setState({url: e.target.value});
@@ -197,7 +231,7 @@ TasksBox = React.createClass({
 
         <div className="top-bar">
           <div className="top-bar-title">
-            <strong>LinkEater</strong>
+            <strong>{config.name} <sup>v{config.version}</sup></strong>
           </div>
         </div>
 
