@@ -27,17 +27,21 @@ import os
 import imp
 import signal
 import logging
-import webbrowser
-from collections import OrderedDict
-from urllib.parse import urldefrag
 from math import ceil
 from operator import truediv
 from uuid import uuid4
 from time import time
-from urllib.parse import urlparse, urljoin, urlencode
 from datetime import datetime
 import shutil
 import shlex
+
+try:
+    # Python 3
+    from urllib.parse import urlparse, urljoin, urlencode, urldefrag
+except ImportError:
+    # Python 2
+    from urllib import urlencode
+    from urlparse import urlparse, urljoin, urldefrag
 
 try:
     from tornado.escape import json_decode
@@ -54,8 +58,8 @@ try:
 except ImportError:
     requirements = (
         'tornado==4.3',
-        'html5lib==0.9999999',
-        'beautifulsoup4==4.4.1'
+        'html5lib==0.999999999',
+        'beautifulsoup4==4.5.1'
     )
 
     msg = (
@@ -184,7 +188,7 @@ class Task(object):
         if self.schedule:
             delay = self.get_delay()
             logger.info(
-                'Scheduling url "%s" after %s seconds', 
+                'Scheduling url "%s" after %s seconds',
                 self.url, delay
             )
             params = {
@@ -282,7 +286,7 @@ class Task(object):
         logger.info('Downloading screenshot of "%s"', self.url)
         yield call_subprocess(
             PDF_CMD.format(
-                url=self.url, 
+                url=self.url,
                 file=self.get_path('screenshot')
             ),
             exit_callback=lambda x: self.up(progress=100)
@@ -302,7 +306,7 @@ class Task(object):
             self.style = Task.STYLE.get(tmp)
 
         tmp = kwargs.get('progress')
-        if tmp and 0 <= tmp <= 100:
+        if tmp and 0 <= tmp <= 100 and tmp > self.progress:
             self.progress = tmp
 
         self.message = kwargs.get('message')
@@ -465,6 +469,7 @@ def on_start():
             port=options.port
         )
 
+        import webbrowser
         webbrowser.open(url, new=2)
 
     # Start workers
@@ -489,14 +494,18 @@ on_signal.signals = {2: 'INT', 15: 'TERM'}
 def call_subprocess(cmd, data=None, exit_callback=None):
     cmd = cmd and shlex.split(cmd)
 
-    subprocess = cmd and Subprocess(
-        cmd, 
-        stdin=Subprocess.STREAM, 
-        stdout=Subprocess.STREAM, 
-        stderr=Subprocess.STREAM,
-    )
+    try:
+        subprocess = cmd and Subprocess(
+            cmd,
+            stdin=Subprocess.STREAM,
+            stdout=Subprocess.STREAM,
+            stderr=Subprocess.STREAM,
+        )
+    except Exception as e:
+        logger.error('Subprocess error: %s', e)
+        subprocess = None
 
-    if data:
+    if data and subprocess:
         yield subprocess.stdin.write(data)
         subprocess.stdin.close()
 
@@ -536,7 +545,7 @@ class MainHandler(RequestHandler):
             self.set_status(200)
             template = 'templates/main.html'
 
-        self.render(template)        
+        self.render(template)
 
 
 class ApiHandler(RequestHandler):
@@ -610,7 +619,7 @@ class MainWebSocketHandler(WebSocketHandler):
         self.send('configuration', {
             'name': NAME,
             'version': '.'.join([str(_) for _ in VERSION]),
-            'debug': options.debug,    
+            'debug': options.debug,
         })
         self.send()
 
@@ -627,7 +636,7 @@ class MainWebSocketHandler(WebSocketHandler):
             self.send()
         else:
             logger.info(
-                'WebsocketHandler have received message: %s', 
+                'WebsocketHandler have received message: %s',
                 message
             )
 
