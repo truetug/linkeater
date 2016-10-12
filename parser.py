@@ -124,6 +124,8 @@ class Task(object):
     STATUS_SUCCESS = 20
     STATUS_FAIL = 30
     STATUS_CANCEL = 40
+    STATUS_SCHEDULED = 50
+    STATUS_DELETED = 60
 
     STATUS_LIST = (
         STATUS_NEW,
@@ -131,6 +133,8 @@ class Task(object):
         STATUS_SUCCESS,
         STATUS_FAIL,
         STATUS_CANCEL,
+        STATUS_SCHEDULED,
+        STATUS_DELETED,
     )
 
     STYLE = {
@@ -173,6 +177,17 @@ class Task(object):
 
     def __str__(self):
         return 'Task on parsing url "{}"'.format(self.url)
+
+    def remove(self):
+        # Cleanup files
+        for key in ('image', 'screenshot'):
+            try:
+                os.remove(self.get_path(key))
+            except (OSError, TypeError):
+                pass
+
+        self.up(status=self.STATUS_DELETED)
+        return True
 
     def as_json(self):
         result = {
@@ -355,15 +370,13 @@ class TaskDispatcher(object):
 
     def remove(self, slug):
         logger.info('Removing task "%s"', slug)
+
         result = False
         if slug in self.storage['tasks']:
             task = self.storage['tasks'][slug]
+            task.remove()
 
-            try:
-                os.remove(task.image_file)
-            except (OSError, TypeError):
-                pass
-
+            # Remove task itself
             try:
                 del(self.storage['tasks'][slug])
             except IndexError:
