@@ -37,11 +37,13 @@ from time import time
 from urllib.parse import urlparse, urljoin, urlencode
 from datetime import datetime
 import shutil
+import shlex
 
 try:
     from tornado.escape import json_decode
     from tornado import gen
     from tornado.websocket import WebSocketHandler, websocket_connect
+    from tornado.process import Subprocess
     from tornado.ioloop import IOLoop
     from tornado.options import define, options, \
         parse_command_line, parse_config_file
@@ -61,6 +63,8 @@ except ImportError:
         'virtualenv env && '
         '. env/bin/activate && '
         'pip install {0} && python {1}',
+        '',
+        'For screenshots support install wkhtmltopdf'
     )
 
     print('\n'.join(msg).format(' '.join(requirements), __file__))
@@ -135,6 +139,11 @@ class Task(object):
         STATUS_FAIL: 'alert',
     }
 
+    file_mapping = {
+        'image': 'image_{slug}.jpg',
+        'screenshot': 'screenshot_{slug}.jpg',
+    }
+
     slug = None
     url = None
     status = None
@@ -149,7 +158,6 @@ class Task(object):
 
     title = None
     heading = None
-    image = None
     image_file = None
 
     message = None
@@ -182,42 +190,61 @@ class Task(object):
             result.update({
                 'title': self.title,
                 'heading': self.heading,
-                'image': self.image,
+                'image': self.get_url('image'),
+                'screenshot': self.get_url('screenshot'),
             })
+
+        return result
+
+    def get_url(self, key):
+        path, url = self.get_path(key), self.get_path(key, is_url=True)
+        return os.path.isfile(path) and url or None
+
+    def get_path(self, key, is_url=False):
+        result = None
+        filename = self.file_mapping.get(key)
+        filename = filename and filename.format(slug=self.slug)
+        if filename:
+            root = MEDIA_URL if is_url else MEDIA_ROOT
+            result = os.path.join(root, filename)
 
         return result
 
     @gen.coroutine
     def process(self):
-        logger.info('Process url "%s"', self.url)
+        logger.info('Processing url "%s"', self.url)
 
         self.soup = bs4.BeautifulSoup(self.content, 'html5lib')
-        # import ipdb; ipdb.set_trace()
 
         tmp = self.soup.find('title')
-        if tmp:
+        if tmp and tmp.string:
             self.title = tmp.string.strip()
 
         tmp = self.soup.find('h1')
-        if tmp:
+        if tmp and tmp.string:
             self.heading = tmp.string.strip()
 
         tmp = self.soup.find('img', src=True)
         if tmp:
-            logging.info('IMAGE', tmp)
-            self.image = urljoin(self.url, tmp.get('src'))
-
-        if self.image:
-            logger.info('Downloading image %s', self.image)
-            self.image_file = os.path.join(MEDIA_ROOT, self.slug)
-            self.image_fp = open(self.image_file, 'wb')
+            tmp = urljoin(self.url, tmp.get('src'))
+            logger.info('Downloading image "%s"', tmp)
+            fp = open(self.get_path('image'), 'wb')
             yield AsyncHTTPClient().fetch(
                 HTTPRequest(
-                    url=self.image,
-                    streaming_callback=self.on_image_stream,
+                    url=tmp,
+                    streaming_callback=lambda c: fp.write(c),
                 )
             )
-            self.image_fp.close()
+            fp.close()
+
+        logger.info('Downloading screenshot of "%s"', self.url)
+        yield call_subprocess(
+            PDF_CMD.format(
+                url=self.url, 
+                file=self.get_path('screenshot')
+            ),
+            exit_callback=lambda x: self.up()
+        )
 
     def up(self, **kwargs):
         now = time()
@@ -418,15 +445,29 @@ on_signal.signals = {2: 'INT', 15: 'TERM'}
 
 
 @gen.coroutine
-def get_url_content(task):
-    try:
-        response = yield AsyncHTTPClient().fetch(task.url)
-        content = response.body
-    except Exception as error:
-        response = error.response
-        content = response.body
+def call_subprocess(cmd, data=None, exit_callback=None):
+    cmd = cmd and shlex.split(cmd)
 
-    raise gen.Return((response.code, content))
+    subprocess = cmd and Subprocess(
+        cmd, 
+        stdin=Subprocess.STREAM, 
+        stdout=Subprocess.STREAM, 
+        stderr=Subprocess.STREAM,
+    )
+
+    if data:
+        yield subprocess.stdin.write(data)
+        subprocess.stdin.close()
+
+    result = subprocess and (yield [
+        subprocess.stdout.read_until_close(),
+        subprocess.stderr.read_until_close(),
+        subprocess.wait_for_exit(raise_error=False),
+    ])
+
+    if callable(exit_callback):
+        exit_callback(result)
+
 
 def get_paged(items, page=0, limit=3):
     result = 3
