@@ -68,9 +68,14 @@ except ImportError:
 
 
 NAME = 'ccbI/I0rpbI3'
+VERSION = (1, 0, 0)
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+PDF_CMD = 'wkhtmltoimage -q {url} {file}'
 
 logger = logging.getLogger(NAME)
 logger.setLevel(logging.INFO)
@@ -93,7 +98,6 @@ define('concurrency', default=5, help='Number of worker for parsing urls')
 
 
 def check_url(url):
-    import ipdb; ipdb.set_trace()
     result = urlparse(url)
     return True
 
@@ -101,9 +105,7 @@ def get_datetime(dt):
     result = None
 
     try:
-
         dt = dt.replace('T', '-').replace(':', '-')
-        # import ipdb; ipdb.set_trace()
         result = dt and datetime(*map(int, dt.split('-')))
     except ValueError:
         pass
@@ -266,7 +268,8 @@ class Task(object):
 
     @gen.coroutine
     def request(self):
-        logger.info('Request url "%s"', self.url)
+        logger.info('Requesting url "%s"', self.url)
+
         self.up(status=self.STATUS_REQUEST)
 
         try:
@@ -281,7 +284,6 @@ class Task(object):
             yield gen.sleep(0.5)
 
             self.response = response
-            # self.content = response.body
             self.up(progress=50)
             yield gen.sleep(0.5)
 
@@ -295,7 +297,7 @@ class Task(object):
             self.up(status=Task.STATUS_FAIL)
 
         self.up(progress=100)
-        logger.debug('Parsed url:\n%s', self.as_json())
+        logger.debug('Parsed url data:\n%s', self.as_json())
         raise gen.Return(True)
 
 
@@ -307,6 +309,7 @@ class TaskDispatcher(object):
     }
 
     def __new__(cls, *args, **kwargs):
+        # Just a singleton
         if not cls._instance:
             cls._instance = super(TaskDispatcher, cls).__new__(cls, *args, **kwargs)
 
@@ -353,9 +356,11 @@ class TaskDispatcher(object):
 
         result = []
         for task in task_list.values():
+            # Kind of status filter
             if status and task.status != status:
                 continue
 
+            # Kind of url filter
             if url and task.url != url:
                 continue
 
@@ -368,9 +373,11 @@ class TaskDispatcher(object):
         queue = self.storage['queue']
         return queue and queue.pop(0) or None
 
+
 @gen.coroutine
 def worker(i):
     logger.info('Starting worker %s', i)
+
     while True:
         task = TaskDispatcher().pop()
         if task:
@@ -382,9 +389,7 @@ def worker(i):
 
 @gen.coroutine
 def on_start():
-    """
-    Opens browser after app start
-    """
+    # Opens browser after app start
     if not options.debug:
         url = "{scheme}://{address}:{port}".format(
             scheme=options.scheme,
@@ -394,14 +399,14 @@ def on_start():
 
         webbrowser.open(url, new=2)
 
-    # Start workers, then wait for the work queue to be empty.
+    # Start workers
     for _ in range(options.concurrency):
         worker(_)
 
 
 def on_signal(signum, frame):
     """
-    Handles signals
+    Handle signals
     """
     logger.info('%s shutdowned because of %s',
         NAME,
@@ -423,35 +428,37 @@ def get_url_content(task):
 
     raise gen.Return((response.code, content))
 
+def get_paged(items, page=0, limit=3):
+    result = 3
+    total = len(items)
+    pages = ceil(truediv(total, limit))
+    if 0 <= page <= pages:
+        offset = page * limit
+
+        result = {
+            'meta': {
+                'total': pages,
+                'current': page,
+            },
+            'objects': items[offset:offset + limit],
+        }
+
+    return result
 
 class MainHandler(RequestHandler):
     def get(self):
         self.render('templates/main.html')
 
 
-class ApiHandler(RequestHandler):
-    limit = 3
 
+class ApiHandler(RequestHandler):
     def get(self, slug=None):
         data = self.handle_get(slug)
-        total = len(data)
-
         page = self.get_argument('page', None)
         page = page and page.isdigit() and int(page) or 0
-        pages = ceil(truediv(total, self.limit))
+        result = get_paged(data, page)
 
-        if 0 <= page <= pages:
-            offset = page * self.limit
-
-            result = {
-                'meta': {
-                    'total': pages,
-                    'current': page,
-                },
-                'objects': data[offset:offset + self.limit],
-            }
-        else:
-            result = ''
+        if not result:
             self.set_status(404)
 
         self.write(result)
@@ -549,6 +556,10 @@ def main():
     # Prepare media dir
     try:
         shutil.rmtree(MEDIA_ROOT)
+    except OSError:
+        pass
+
+    try:
         os.makedirs(MEDIA_ROOT)
     except OSError:
         logger.error('Something wrong with media directory "%s"', MEDIA_ROOT)
