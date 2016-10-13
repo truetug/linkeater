@@ -83,6 +83,7 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+WEBSOCKET_URL = '/websocket/'
 PDF_CMD = 'wkhtmltoimage -q {url} {file}'
 
 logger = logging.getLogger(NAME)
@@ -546,7 +547,15 @@ class MainHandler(RequestHandler):
             self.set_status(200)
             template = 'templates/main.html'
 
-        self.render(template)
+        self.render(
+            template,
+            websocket_url='{scheme}://{host}:{port}{url}'.format(
+                scheme='ws',
+                host=options.address,
+                port=options.port,
+                url=WEBSOCKET_URL,
+            ),
+        )
 
 
 class ApiHandler(RequestHandler):
@@ -621,6 +630,7 @@ class MainWebSocketHandler(WebSocketHandler):
             'name': NAME,
             'version': '.'.join([str(_) for _ in VERSION]),
             'debug': options.debug,
+            'author': 'tug',
         })
         self.send()
 
@@ -704,9 +714,9 @@ def main():
     app = Application([
         (r'/api/task/$', TaskHandler),
         (r'/api/task/([^/]+)/$', TaskHandler),
-        (r'/static/(.*)', StaticFileHandler, {'path': STATIC_ROOT}),
-        (r'/media/(.*)', StaticFileHandler, {'path': MEDIA_ROOT}),
-        (r'/websocket/$', MainWebSocketHandler),
+        (r'{}(.*)'.format(STATIC_URL), StaticFileHandler, {'path': STATIC_ROOT}),
+        (r'{}(.*)'.format(MEDIA_URL), StaticFileHandler, {'path': MEDIA_ROOT}),
+        (r'{}$'.format(WEBSOCKET_URL), MainWebSocketHandler),
         (r'/([^/]+)?/?', MainHandler),
     ], **options.group_dict('application'))
 

@@ -1,14 +1,12 @@
-var config = {
-  name: 'LinkEater',
-  version: '1.0.0',
+var container = document.getElementById('content'),
+config = {
   debug: true,
   defaultUrl: 'http://ya.ru\nhttp://google.com\nhttp://facebook.com\nhttp://mail.ru',
   urls: {
     site: 'http://truetug.info/',
-    ws: 'ws://127.0.0.1:8888/websocket/',
+    ws: container.getAttribute('data-ws'),
     task: '/api/task/',
   },
-  author: 'tug',
   taskBoxRefreshPeriodicity: 500,
   paginationNear: 3,
   scheduledMax: 5,
@@ -19,7 +17,7 @@ log = function(){
 },
 sock = window.WebSocket === undefined && function(){
   // Weird experiment
-  log('Websocket is not available'); 
+  log('Websocket is not available');
 
   return {
     send: function(){}
@@ -28,16 +26,16 @@ sock = window.WebSocket === undefined && function(){
       maxTimeout = 30000,
       ws,
       listeners = {},
-      connect = function(){ 
+      connect = function(){
         ws = new WebSocket(config.urls.ws);
         ws.onopen = function(event){ log('connected', event) };
-        ws.onclose = function(event){ 
+        ws.onclose = function(event){
           log('close', event, 'reconnect in', timeout);
           setTimeout(connect, timeout);
           timeout = Math.min(timeout * 2, maxTimeout);
         };
         ws.onerror = function(event){ log('error', event) };
-        ws.onmessage = function(event){ 
+        ws.onmessage = function(event){
           log('on message', event);
 
           var data = JSON.parse(event.data),
@@ -72,6 +70,14 @@ sock = window.WebSocket === undefined && function(){
   }
 }(),
 now = new Date();
+
+if(sock)
+(function(){
+  sock.register('configuration', function(data){
+    log('Update config', data);
+    config = Object.assign(config, data);
+  })
+})();
 
 var Root = React.createClass({
   render: function(){
@@ -122,7 +128,7 @@ Paginator = React.createClass({
             <ul className="pagination text-center" role="navigation" aria-label="Pagination">
               {pageList.map((item, i) => {
                 let itemCls = [item.cls, item.isDisabled && 'disabled', item.isCurrent && 'current'].map((cls) => cls || '').join(' ').trim();
-                
+
                 return (item.isCurrent || item.isDisabled) ? (
                   <li key={i} className={itemCls}>
                     <span className="show-for-sr">You are on page</span> {item.display}
@@ -263,7 +269,7 @@ TasksBox = React.createClass({
         <footer className="b-footer">
           <div className="row">
             <div className="column text-center">
-              <small>© <a href="{config.urls.site}">{config.author}</a>, {now.getFullYear()}</small>
+              <small>© <a href={config.urls.site}>{config.author}</a>, {now.getFullYear()}</small>
             </div>
           </div>
         </footer>
@@ -280,14 +286,14 @@ TasksList = React.createClass({
             var progressCls = ['progress', task.style].join(' '),
                 progressStl = {width: task.progress + '%'},
                 taskStl = (task.image) ? {
-                  backgroundImage: 'url(' + task.image + ')', 
+                  backgroundImage: 'url(' + task.image + ')',
                   backgroundPosition: 'top center',
                   backgroundRepeat: 'no-repeat',
                   backgroundSize: 'contain',
                 } : {},
                 taskTitle = (task.progress == 100) ? task.url : task.url + ' (' + task.dl + ' kb)',
                 taskScreenshotStl = {
-                  backgroundImage: 'url(' + task.screenshot + ')', 
+                  backgroundImage: 'url(' + task.screenshot + ')',
                   backgroundPosition: 'top center',
                   backgroundRepeat: 'no-repeat',
                   backgroundSize: 'cover',
@@ -364,4 +370,4 @@ TasksForm = React.createClass({
   }
 });
 
-ReactDOM.render(<TasksBox />, document.getElementById('content'));
+ReactDOM.render(<TasksBox />, container);
