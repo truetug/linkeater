@@ -318,7 +318,8 @@ class Task(object):
         return self.status
 
     def prepare(self, url):
-        url = url and urldefrag(url).url
+        url = url and urldefrag(url)
+        url = url and len(url) and url[0] or url.url
         return url
 
     def on_head(self, *args, **kwargs):
